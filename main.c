@@ -6,9 +6,9 @@
 #define WIDGET_WIDTH 250
 #define WIDGET_HEIGHT 30
 
-char batteryText[100] = "Caricamento...";
+char batteryText[100] = "Loading...";
 
-// Aggiunge l'eseguibile al registro di sistema
+// Adds the executable to the system registry for auto-start
 void AddToStartup() {
     char path[MAX_PATH];
     GetModuleFileName(NULL, path, MAX_PATH);
@@ -19,49 +19,49 @@ void AddToStartup() {
     }
 }
 
-// Legge i dati batteria nativamente da Windows e aggiorna il testo
+// Reads battery data natively from Windows and updates the text
 void UpdateBatteryText(HWND hwnd) {
     SYSTEM_POWER_STATUS sps;
     if (GetSystemPowerStatus(&sps)) {
         if (sps.BatteryLifePercent == 255) {
-            sprintf(batteryText, "Nessuna batteria rilevata");
+            sprintf(batteryText, "No battery detected");
         } else {
             int percent = sps.BatteryLifePercent;
             if (sps.ACLineStatus == 1) {
-                sprintf(batteryText, "%d%% | In carica", percent);
+                sprintf(batteryText, "%d%% | Charging", percent);
             } else if (sps.BatteryLifeTime == (DWORD)-1) {
-                sprintf(batteryText, "%d%% | Calcolo...", percent);
+                sprintf(batteryText, "%d%% | Calculating...", percent);
             } else {
                 int hours = sps.BatteryLifeTime / 3600;
                 int mins = (sps.BatteryLifeTime % 3600) / 60;
-                sprintf(batteryText, "%d%% | %dh e %dm", percent, hours, mins);
+                sprintf(batteryText, "%d%% | %dh %dm", percent, hours, mins);
             }
         }
-        // Forza Windows a ridisegnare solo il testo aggiornato
+        // Forces Windows to redraw only the updated text
         InvalidateRect(hwnd, NULL, TRUE);
     }
 }
 
-// Gestore Messaggi di Windows (Message Loop)
+// Windows Message Handler (Message Loop)
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     static HFONT hFont;
 
     switch (uMsg) {
         case WM_CREATE:
-            // Crea il font (Segoe UI, grassetto, dimensione 16)
+            // Creates the font (Segoe UI, bold, size 16)
             hFont = CreateFont(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET,
                                OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                                VARIABLE_PITCH, "Segoe UI");
 
-            // Imposta i timer (senza usare thread esterni!)
-            SetTimer(hwnd, ID_TIMER_TOPMOST, 500, NULL);   // Ciclo anti-swipe (ogni mezzo secondo)
-            SetTimer(hwnd, ID_TIMER_BATTERY, 5000, NULL);  // Ciclo lettura batteria (ogni 5 secondi)
+            // Sets up the timers (without using external threads!)
+            SetTimer(hwnd, ID_TIMER_TOPMOST, 500, NULL);   // Anti-swipe cycle (every half second)
+            SetTimer(hwnd, ID_TIMER_BATTERY, 5000, NULL);  // Battery reading cycle (every 5 seconds)
             UpdateBatteryText(hwnd);
             return 0;
 
         case WM_TIMER:
             if (wParam == ID_TIMER_TOPMOST) {
-                // Forza Z-Order sopra a tutto
+                // Forces Z-Order on top of everything
                 SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
             } else if (wParam == ID_TIMER_BATTERY) {
                 UpdateBatteryText(hwnd);
@@ -73,8 +73,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             HDC hdc = BeginPaint(hwnd, &ps);
 
             SelectObject(hdc, hFont);
-            SetBkMode(hdc, TRANSPARENT); // Sfondo del testo trasparente
-            SetTextColor(hdc, RGB(255, 255, 255)); // Colore testo Bianco
+            SetBkMode(hdc, TRANSPARENT); // Transparent text background
+            SetTextColor(hdc, RGB(255, 255, 255)); // White text color
 
             RECT rect;
             GetClientRect(hwnd, &rect);
@@ -92,27 +92,27 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
-// Entry point di Windows (sostituisce il main standard)
+// Windows entry point (replaces standard main)
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    // 1. Controllo Istanza Singola
+    // 1. Single Instance Check
     HANDLE hMutex = CreateMutex(NULL, TRUE, "MinimalBatteryWidget_Native_Mutex_123");
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        return 0; // Chiude silenziosamente se è già aperto
+        return 0; // Closes silently if already running
     }
 
-    // 2. Avvio automatico
+    // 2. Auto-start on boot
     AddToStartup();
 
-    // 3. Registrazione Classe Finestra
+    // 3. Window Class Registration
     const char CLASS_NAME[] = "BatteryWidgetClass";
     WNDCLASS wc = { 0 };
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
-    wc.hbrBackground = CreateSolidBrush(RGB(0, 0, 0)); // Sfondo nero (che diventerà invisibile)
+    wc.hbrBackground = CreateSolidBrush(RGB(0, 0, 0)); // Black background (which will become invisible)
     RegisterClass(&wc);
 
-    // 4. Calcolo Posizione (sulla Taskbar)
+    // 4. Position Calculation (on the Taskbar)
     RECT workArea;
     SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
@@ -121,23 +121,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     int y = (taskbarH > 0) ? workArea.bottom + (taskbarH - WIDGET_HEIGHT) / 2 : screenH - WIDGET_HEIGHT - 10;
     int x = 20;
 
-    // 5. Creazione Finestra Invisibile e Click-through
+    // 5. Invisible and Click-through Window Creation
     HWND hwnd = CreateWindowEx(
         WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST,
         CLASS_NAME,
         "Battery Widget",
-        WS_POPUP, // Finestra pura senza bordi o barra del titolo
+        WS_POPUP, // Pure window without borders or title bar
         x, y, WIDGET_WIDTH, WIDGET_HEIGHT,
         NULL, NULL, hInstance, NULL
     );
 
     if (hwnd == NULL) return 0;
 
-    // Rende il colore NERO (RGB 0,0,0) completamente trasparente
+    // Makes the BLACK color (RGB 0,0,0) completely transparent
     SetLayeredWindowAttributes(hwnd, RGB(0, 0, 0), 0, LWA_COLORKEY);
     ShowWindow(hwnd, SW_SHOW);
 
-    // 6. Ciclo dei Messaggi Nativo (non usa % CPU quando inattivo)
+    // 6. Native Message Loop (uses 0% CPU when idle)
     MSG msg = { 0 };
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
