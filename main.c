@@ -12,7 +12,7 @@
 // --- CONFIGURATION & CONSTANTS ---
 #define CURRENT_VERSION 2
 #define GITHUB_VERSION_URL "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/version.txt"
-#define GITHUB_EXE_URL     "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/BatteryWidget.exe"
+#define GITHUB_EXE_URL     "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/battery_widget.exe"
 
 #define ID_TIMER_TOPMOST 1
 #define ID_TIMER_BATTERY 2
