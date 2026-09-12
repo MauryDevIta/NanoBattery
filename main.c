@@ -10,7 +10,7 @@
 #include <urlmon.h>
 
 // --- CONFIGURATION & CONSTANTS ---
-#define CURRENT_VERSION 4
+#define CURRENT_VERSION 5
 #define GITHUB_VERSION_URL "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/version.txt"
 #define GITHUB_EXE_URL     "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/battery_widget.exe"
 
@@ -175,7 +175,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
             SelectObject(hdc, hFont);
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(255, 255, 255));
+            SetTextColor(hdc, RGB(0, 255, 255));
 
             RECT rect;
             GetClientRect(hwnd, &rect);
