@@ -1,8 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
-project(BatteryWidget C)
+project(battery_widget C)
 
 set(CMAKE_C_STANDARD 11)
 
-# Il flag WIN32 nasconde la console, target_link_libraries aggiunge gdi32
+# Il flag WIN32 equivale a -mwindows (evita l'apertura della console nera)
 add_executable(battery_widget WIN32 main.c)
-target_link_libraries(battery_widget gdi32)
+
+# Collega le librerie di sistema necessarie per ShellExecute e URLDownloadToFile
+target_link_libraries(battery_widget PRIVATE
+        urlmon
+        shell32
+)

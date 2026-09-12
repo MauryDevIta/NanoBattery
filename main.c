@@ -1,14 +1,19 @@
 /**
- * Windows Native Battery Widget
+ * Windows Native Battery Widget with Remote Auto-Updater
  * A lightweight, zero-dependency, DPI-aware battery monitor for the Windows Taskbar.
- * Implements a global mouse hook for transparent UI interaction and Z-order persistence.
+ * Implements a global mouse hook for transparent UI interaction and silent self-updating.
  */
 
 #include <windows.h>
 #include <stdio.h>
 #include <shellapi.h>
+#include <urlmon.h>
 
 // --- CONFIGURATION & CONSTANTS ---
+#define CURRENT_VERSION 1
+#define GITHUB_VERSION_URL "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/version.txt"
+#define GITHUB_EXE_URL     "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/BatteryWidget.exe"
+
 #define ID_TIMER_TOPMOST 1
 #define ID_TIMER_BATTERY 2
 #define WM_OPEN_SETTINGS (WM_APP + 1)
@@ -24,6 +29,59 @@ char batteryText[128] = "Loading...";
 HWND hwndGlobal = NULL;
 HHOOK mouseHook = NULL;
 
+// --- AUTO-UPDATE ENGINE ---
+void CheckForUpdates(void) {
+    char currentExePath[MAX_PATH];
+    char tempVersionPath[MAX_PATH];
+    char newExePath[MAX_PATH];
+    char batPath[MAX_PATH];
+    char dir[MAX_PATH];
+
+    GetModuleFileName(NULL, currentExePath, MAX_PATH);
+    strncpy(dir, currentExePath, MAX_PATH);
+    char *lastSlash = strrchr(dir, '\\');
+    if (lastSlash) *lastSlash = '\0';
+
+    snprintf(tempVersionPath, sizeof(tempVersionPath), "%s\\version_temp.txt", dir);
+    snprintf(newExePath, sizeof(newExePath), "%s\\BatteryWidget_new.exe", dir);
+    snprintf(batPath, sizeof(batPath), "%s\\updater.bat", dir);
+
+    // Silently query GitHub for the latest version tag
+    if (URLDownloadToFile(NULL, GITHUB_VERSION_URL, tempVersionPath, 0, NULL) == S_OK) {
+        FILE *f = fopen(tempVersionPath, "r");
+        if (f) {
+            int onlineVersion = 0;
+            if (fscanf(f, "%d", &onlineVersion) == 1) {
+                fclose(f);
+                DeleteFile(tempVersionPath);
+
+                if (onlineVersion > CURRENT_VERSION) {
+                    // Download replacement binary
+                    if (URLDownloadToFile(NULL, GITHUB_EXE_URL, newExePath, 0, NULL) == S_OK) {
+                        FILE *bat = fopen(batPath, "w");
+                        if (bat) {
+                            // Relay script: waits for current process termination, swaps binaries, restarts, self-destructs
+                            fprintf(bat, "@echo off\n");
+                            fprintf(bat, "timeout /t 2 /nobreak > NUL\n");
+                            fprintf(bat, "del \"%s\"\n", currentExePath);
+                            fprintf(bat, "move \"%s\" \"%s\"\n", newExePath, currentExePath);
+                            fprintf(bat, "start \"\" \"%s\"\n", currentExePath);
+                            fprintf(bat, "del \"%%~f0\"\n");
+                            fclose(bat);
+
+                            ShellExecute(NULL, "open", batPath, NULL, NULL, SW_HIDE);
+                            ExitProcess(0);
+                        }
+                    }
+                }
+            } else {
+                fclose(f);
+                DeleteFile(tempVersionPath);
+            }
+        }
+    }
+}
+
 // --- MOUSE HOOK: Handles clicks on the transparent window ---
 LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
@@ -31,18 +89,15 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
             MSLLHOOKSTRUCT *mhs = (MSLLHOOKSTRUCT*)lParam;
             RECT rect;
 
-            // Verify if the click is within the widget's boundaries
             if (hwndGlobal && GetWindowRect(hwndGlobal, &rect)) {
                 if (PtInRect(&rect, mhs->pt)) {
                     if (wParam == WM_LBUTTONUP) {
-                        // Left Click: Asynchronously open Windows Power Settings
                         PostMessage(hwndGlobal, WM_OPEN_SETTINGS, 0, 0);
                     }
                     else if (wParam == WM_RBUTTONUP) {
-                        // Right Click: Gracefully terminate the application
                         PostMessage(hwndGlobal, WM_CLOSE, 0, 0);
                     }
-                    return 1; // Consume the event (prevents clicking underlying windows)
+                    return 1;
                 }
             }
         }
@@ -51,7 +106,7 @@ LRESULT CALLBACK MouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
 }
 
 // --- REGISTRY: Registers the application for auto-start on boot ---
-void AddToStartup() {
+void AddToStartup(void) {
     char path[MAX_PATH];
     GetModuleFileName(NULL, path, MAX_PATH);
     HKEY hKey;
@@ -80,12 +135,11 @@ void UpdateBatteryText(HWND hwnd) {
                 sprintf(batteryText, "%d%% | %dh %dm", percent, hours, mins);
             }
         }
-        // Trigger a UI repaint
         InvalidateRect(hwnd, NULL, TRUE);
     }
 }
 
-// --- WINDOW PROCEDURE: Handles Windows messages ---
+// --- WINDOW PROCEDURE ---
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     static HFONT hFont;
 
@@ -95,9 +149,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                                OUT_OUTLINE_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                                VARIABLE_PITCH, "Segoe UI");
 
-            // Initialize system timers
-            SetTimer(hwnd, ID_TIMER_TOPMOST, 500, NULL);   // Z-Order enforcement
-            SetTimer(hwnd, ID_TIMER_BATTERY, 5000, NULL);  // Battery polling
+            SetTimer(hwnd, ID_TIMER_TOPMOST, 500, NULL);
+            SetTimer(hwnd, ID_TIMER_BATTERY, 5000, NULL);
             UpdateBatteryText(hwnd);
             return 0;
 
@@ -119,7 +172,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
             SelectObject(hdc, hFont);
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(255, 255, 255)); // White text
+            SetTextColor(hdc, RGB(255, 255, 255));
 
             RECT rect;
             GetClientRect(hwnd, &rect);
@@ -139,28 +192,26 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 // --- ENTRY POINT ---
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    // 1. Enable DPI Awareness for high-resolution displays
     SetProcessDPIAware();
 
-    // 2. Prevent multiple instances (Race condition prevention)
     HANDLE hMutex = CreateMutex(NULL, TRUE, MUTEX_NAME);
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        return 0; // Exit silently
+        return 0;
     }
 
-    // 3. Register for Auto-Startup
     AddToStartup();
 
-    // 4. Register Window Class
+    // Perform pre-flight silent update check before rendering UI
+    CheckForUpdates();
+
     const char CLASS_NAME[] = "BatteryWidgetClass";
     WNDCLASS wc = { 0 };
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
-    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH); // Optimized resource allocation
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     RegisterClass(&wc);
 
-    // 5. Calculate Taskbar Coordinates
     RECT workArea;
     SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0);
     int screenH = GetSystemMetrics(SM_CYSCREEN);
@@ -169,7 +220,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     int y = (taskbarH > 0) ? workArea.bottom + (taskbarH - WIDGET_HEIGHT) / 2 : screenH - WIDGET_HEIGHT - 10;
     int x = WIDGET_OFFSET_X;
 
-    // 6. Create the Overlay Window
     hwndGlobal = CreateWindowEx(
         WS_EX_TOOLWINDOW | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST,
         CLASS_NAME, "Battery Widget", WS_POPUP,
@@ -178,21 +228,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     if (hwndGlobal == NULL) return 0;
 
-    // Set Chroma Key Transparency (Black becomes invisible)
     SetLayeredWindowAttributes(hwndGlobal, RGB(0, 0, 0), 0, LWA_COLORKEY);
     ShowWindow(hwndGlobal, SW_SHOW);
 
-    // 7. Install Global Mouse Hook
     mouseHook = SetWindowsHookEx(WH_MOUSE_LL, MouseHookProc, hInstance, 0);
 
-    // 8. Main Message Loop
     MSG msg = { 0 };
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
 
-    // 9. Clean Exit
     UnhookWindowsHookEx(mouseHook);
     ReleaseMutex(hMutex);
     CloseHandle(hMutex);
