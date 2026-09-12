@@ -10,7 +10,7 @@
 #include <urlmon.h>
 
 // --- CONFIGURATION & CONSTANTS ---
-#define CURRENT_VERSION 3
+#define CURRENT_VERSION 4
 #define GITHUB_VERSION_URL "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/version.txt"
 #define GITHUB_EXE_URL     "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/battery_widget.exe"
 
@@ -65,7 +65,10 @@ void CheckForUpdates(void) {
                             fprintf(bat, "timeout /t 2 /nobreak > NUL\n");
                             fprintf(bat, "del \"%s\"\n", currentExePath);
                             fprintf(bat, "move \"%s\" \"%s\"\n", newExePath, currentExePath);
-                            fprintf(bat, "start \"\" \"%s\"\n", currentExePath);
+
+                            // Aggiungiamo il flag --updated per scatenare il popup al prossimo avvio
+                            fprintf(bat, "start \"\" \"%s\" --updated\n", currentExePath);
+
                             fprintf(bat, "del \"%%~f0\"\n");
                             fclose(bat);
 
@@ -230,6 +233,16 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     SetLayeredWindowAttributes(hwndGlobal, RGB(0, 0, 0), 0, LWA_COLORKEY);
     ShowWindow(hwndGlobal, SW_SHOW);
+
+    // --- CONTROLLO MESSAGGIO DI AGGIORNAMENTO ---
+    // Se il programma è stato avviato dallo script .bat con il flag --updated, mostra il popup
+    if (strstr(lpCmdLine, "--updated") != NULL) {
+        MessageBox(NULL,
+            "NanoBattery has been successfully updated to the latest version!\n\nEnjoy the new features.",
+            "✨ Update Successful",
+            MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
+    }
+    // --------------------------------------------
 
     mouseHook = SetWindowsHookEx(WH_MOUSE_LL, MouseHookProc, hInstance, 0);
 
