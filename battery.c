@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <initguid.h>
 #include <setupapi.h>
 #include <devguid.h>
 #include <winioctl.h>

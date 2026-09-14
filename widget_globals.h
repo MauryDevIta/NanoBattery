@@ -4,7 +4,7 @@
 #include <windows.h>
 
 // --- CONFIGURATION & CONSTANTS ---
-#define CURRENT_VERSION 10
+// Version is now defined in CMakeLists.txt via version.txt
 #define GITHUB_VERSION_URL "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/version.txt"
 #define GITHUB_EXE_URL     "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/battery_widget.exe"
 

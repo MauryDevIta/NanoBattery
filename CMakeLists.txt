@@ -3,6 +3,10 @@ project(battery_widget C)
 
 set(CMAKE_C_STANDARD 99)
 
+file(READ "version.txt" APP_VERSION)
+string(STRIP "${APP_VERSION}" APP_VERSION)
+add_definitions(-DCURRENT_VERSION=${APP_VERSION})
+
 add_executable(battery_widget WIN32
         main.c
         globals.c

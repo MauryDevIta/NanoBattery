@@ -14,7 +14,9 @@
 #include "system_utils.h"
 
 typedef BOOL(WINAPI *SetProcessDpiAwarenessContext_t)(HANDLE);
+#ifndef DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
 #define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((HANDLE)-4)
+#endif
 
 // --- WINDOW PROCEDURE ---
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -232,7 +234,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     HANDLE hMutex = CreateMutex(NULL, TRUE, MUTEX_NAME);
     if (GetLastError() == ERROR_ALREADY_EXISTS) return 0;
 
-    InitUpdaterAsync();
+    if (strstr(lpCmdLine, "--updated") == NULL) {
+        InitUpdaterAsync();
+    }
 
     const char CLASS_NAME[] = "BatteryWidgetClass";
     WNDCLASS wc = { 0 };
@@ -274,8 +278,4 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         DispatchMessage(&msg);
     }
 
-    UnhookWindowsHookEx(mouseHook);
-    ReleaseMutex(hMutex);
-    CloseHandle(hMutex);
-    return 0;
-}
+    UnhookWindowsHookEx(mouseHook);\n    ReleaseMutex(hMutex);\n    CloseHandle(hMutex);\n    return 0;\n}\n
