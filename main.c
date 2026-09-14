@@ -8,10 +8,11 @@
 #include <stdio.h>
 #include <shellapi.h>
 #include <string.h>
+#include <stdlib.h> // Aggiunto per la funzione abs()
 #include <urlmon.h>
 
 // --- CONFIGURATION & CONSTANTS ---
-#define CURRENT_VERSION 7
+#define CURRENT_VERSION 8
 #define GITHUB_VERSION_URL "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/version.txt"
 #define GITHUB_EXE_URL     "https://raw.githubusercontent.com/MauryDevIta/NanoBattery/refs/heads/main/battery_widget.exe"
 
@@ -124,18 +125,37 @@ void AddToStartup(void) {
 // --- HARDWARE I/O: Fetches battery status via Windows API ---
 void UpdateBatteryText(HWND hwnd) {
     SYSTEM_POWER_STATUS sps;
+
+    // Variabile statica: si ricorda il tempo medio anche tra un tick e l'altro del timer
+    static int smoothedLifeTime = -1;
+
     if (GetSystemPowerStatus(&sps)) {
         if (sps.BatteryLifePercent == 255) {
             sprintf(batteryText, "No battery detected");
+            smoothedLifeTime = -1;
         } else {
             int percent = sps.BatteryLifePercent;
+
             if (sps.ACLineStatus == 1) {
                 sprintf(batteryText, "%d%% | Charging", percent);
+                smoothedLifeTime = -1; // Se attacchi la spina, azzera la media
             } else if (sps.BatteryLifeTime == (DWORD)-1) {
                 sprintf(batteryText, "%d%% | Calculating...", percent);
             } else {
-                int hours = sps.BatteryLifeTime / 3600;
-                int mins = (sps.BatteryLifeTime % 3600) / 60;
+                int currentOsTime = sps.BatteryLifeTime;
+
+                // LOGICA DELLA MEDIA INTELLIGENTE
+                // Se è la prima lettura, o se c'è un salto termico/energetico di oltre 30 min (1800 sec),
+                // significa che hai cambiato profilo energetico o aperto un gioco pesante: RESETTA LA MEDIA.
+                if (smoothedLifeTime == -1 || abs(currentOsTime - smoothedLifeTime) > 1800) {
+                    smoothedLifeTime = currentOsTime;
+                } else {
+                    // Altrimenti assorbe le fluttuazioni: 90% storico + 10% nuovo dato di Windows
+                    smoothedLifeTime = (int)((currentOsTime * 0.1) + (smoothedLifeTime * 0.9));
+                }
+
+                int hours = smoothedLifeTime / 3600;
+                int mins = (smoothedLifeTime % 3600) / 60;
                 sprintf(batteryText, "%d%% | %dh %dm", percent, hours, mins);
             }
         }
@@ -176,7 +196,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
             SelectObject(hdc, hFont);
             SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, RGB(0, 255, 0));
+            SetTextColor(hdc, RGB(255, 255, 255));
 
             RECT rect;
             GetClientRect(hwnd, &rect);
