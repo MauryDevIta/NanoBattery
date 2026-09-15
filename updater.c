@@ -5,12 +5,29 @@
 #include <urlmon.h>
 #include <shellapi.h>
 
+static void BuildUpdaterScript(const char *batPath, const char *currentExe, const char *newExe) {
+    FILE *bat = fopen(batPath, "w");
+    if (bat) {
+        fprintf(bat,
+                "@echo off\n"
+                ":retry\n"
+                "timeout /t 1 /nobreak > NUL\n"
+                "del \"%s\" > NUL 2>&1\n"
+                "if exist \"%s\" goto retry\n"
+                "move \"%s\" \"%s\" > NUL\n"
+                "start \"\" \"%s\" --updated\n"
+                "del \"%%~f0\"\n",
+                currentExe, currentExe, newExe, currentExe, currentExe);
+        fclose(bat);
+    }
+}
+
 void CheckForUpdates(void) {
     char currentExePath[MAX_PATH];
     char tempVersionPath[MAX_PATH], newExePath[MAX_PATH], batPath[MAX_PATH], dir[MAX_PATH];
 
-    GetModuleFileName(NULL, currentExePath, MAX_PATH);
-    strncpy(dir, currentExePath, MAX_PATH);
+    if (GetModuleFileName(NULL, currentExePath, MAX_PATH) == 0) return;
+    snprintf(dir, sizeof(dir), "%s", currentExePath);
     char *lastSlash = strrchr(dir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
@@ -28,38 +45,38 @@ void CheckForUpdates(void) {
 
                 if (onlineVersion > CURRENT_VERSION) {
                     if (URLDownloadToFile(NULL, GITHUB_EXE_URL, newExePath, 0, NULL) == S_OK) {
-                        FILE *bat = fopen(batPath, "w");
-                        if (bat) {
-                            fprintf(bat, "@echo off\ntimeout /t 2 /nobreak > NUL\ndel \"%s\"\nmove \"%s\" \"%s\"\nstart \"\" \"%s\" --updated\ndel \"%%~f0\"\n", currentExePath, newExePath, currentExePath, currentExePath);
-                            fclose(bat);
-                            ShellExecute(NULL, "open", batPath, NULL, NULL, SW_HIDE);
-                            ExitProcess(0);
-                        }
+                        BuildUpdaterScript(batPath, currentExePath, newExePath);
+                        ShellExecute(NULL, "open", batPath, NULL, NULL, SW_HIDE);
+                        ExitProcess(0);
                     }
                 }
-            } else {
-                fclose(f);
-                DeleteFile(tempVersionPath);
+                return;
             }
+            fclose(f);
         }
+        DeleteFile(tempVersionPath);
     }
 }
 
-DWORD WINAPI UpdateThreadProc(LPVOID lpParam) {
+static DWORD WINAPI UpdateThreadProc(LPVOID lpParam) {
+    (void)lpParam;
     CheckForUpdates();
     return 0;
 }
 
 void InitUpdaterAsync(void) {
-    CreateThread(NULL, 0, UpdateThreadProc, NULL, 0, NULL);
+    HANDLE hThread = CreateThread(NULL, 0, UpdateThreadProc, NULL, 0, NULL);
+    if (hThread) {
+        CloseHandle(hThread);
+    }
 }
 
 void CheckForUpdatesManual(HWND hwnd) {
     char currentExePath[MAX_PATH];
     char tempVersionPath[MAX_PATH], newExePath[MAX_PATH], batPath[MAX_PATH], dir[MAX_PATH];
 
-    GetModuleFileName(NULL, currentExePath, MAX_PATH);
-    strncpy(dir, currentExePath, MAX_PATH);
+    if (GetModuleFileName(NULL, currentExePath, MAX_PATH) == 0) return;
+    snprintf(dir, sizeof(dir), "%s", currentExePath);
     char *lastSlash = strrchr(dir, '\\');
     if (lastSlash) *lastSlash = '\0';
 
@@ -76,26 +93,32 @@ void CheckForUpdatesManual(HWND hwnd) {
                 DeleteFile(tempVersionPath);
 
                 if (onlineVersion > CURRENT_VERSION) {
-                    if (MessageBox(hwnd, "Nuova versione disponibile! Vuoi aggiornare ora?", "NanoBattery Update", MB_YESNO | MB_ICONINFORMATION | MB_TOPMOST) == IDYES) {
+                    char msgPrompt[256];
+                    snprintf(msgPrompt, sizeof(msgPrompt),
+                             "Nuova versione disponibile (build %d)!\nVersione attuale: build %d (v%s).\n\nVuoi aggiornare ora?",
+                             onlineVersion, CURRENT_VERSION, APP_VERSION_STR);
+
+                    if (MessageBox(hwnd, msgPrompt, "NanoBattery Update", MB_YESNO | MB_ICONINFORMATION | MB_TOPMOST) == IDYES) {
                         if (URLDownloadToFile(NULL, GITHUB_EXE_URL, newExePath, 0, NULL) == S_OK) {
-                            FILE *bat = fopen(batPath, "w");
-                            if (bat) {
-                                fprintf(bat, "@echo off\ntimeout /t 2 /nobreak > NUL\ndel \"%s\"\nmove \"%s\" \"%s\"\nstart \"\" \"%s\" --updated\ndel \"%%~f0\"\n", currentExePath, newExePath, currentExePath, currentExePath);
-                                fclose(bat);
-                                ShellExecute(NULL, "open", batPath, NULL, NULL, SW_HIDE);
-                                ExitProcess(0);
-                            }
+                            BuildUpdaterScript(batPath, currentExePath, newExePath);
+                            ShellExecute(NULL, "open", batPath, NULL, NULL, SW_HIDE);
+                            ExitProcess(0);
+                        } else {
+                            MessageBox(hwnd, "Impossibile scaricare il file di aggiornamento.", "NanoBattery - Errore", MB_OK | MB_ICONERROR | MB_TOPMOST);
                         }
                     }
                 } else {
-                    MessageBox(hwnd, "L'applicazione è già aggiornata all'ultima versione.", "NanoBattery - Update Info", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
+                    char msgCurrent[256];
+                    snprintf(msgCurrent, sizeof(msgCurrent),
+                             "L'applicazione \xC3\xA8 gi\xC3\xA0 aggiornata all'ultima versione.\nVersione: %s (build %d)",
+                             APP_VERSION_STR, CURRENT_VERSION);
+                    MessageBox(hwnd, msgCurrent, "NanoBattery - Update Info", MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
                 }
                 return;
-            } else {
-                fclose(f);
             }
+            fclose(f);
         }
         DeleteFile(tempVersionPath);
     }
-    MessageBox(hwnd, "Impossibile controllare gli aggiornamenti. Verifica la connessione internet.", "NanoBattery - Errore", MB_OK | MB_ICONERROR | MB_TOPMOST);
+    MessageBox(hwnd, "Impossibile verificare gli aggiornamenti.\nControlla la connessione internet.", "NanoBattery - Errore", MB_OK | MB_ICONERROR | MB_TOPMOST);
 }
